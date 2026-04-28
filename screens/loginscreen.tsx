@@ -5,46 +5,52 @@ import {
   StyleSheet,
   Image,
   TouchableOpacity,
-  Dimensions,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-
-const { height } = Dimensions.get("window");
+import { StatusBar } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 
 export default function LoginScreen() {
+  const navigation = useNavigation<any>();
+
   return (
     <View style={styles.container}>
-      
-      {/* FUNDO COM GRADIENTE */}
-      <LinearGradient
-        colors={["#02132b", "#000"]}
-        style={styles.background}
+      {/* IMAGEM COMO BACKGROUND TELA INTEIRA */}
+      <Image
+        source={require("../assets/backgroundcadastro.gif")}
+        style={styles.backgroundImage}
+        resizeMode="cover"
       />
-
-      {/* IMAGEM DO CELULAR */}
-      <View style={styles.imageContainer}>
-        <Image
-          source={require("../assets/backgroundfinance.jpg")}
-          style={styles.image}
-          resizeMode="contain"
-        />
-      </View>
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor="transparent"
+        translucent={true}
+      />
 
       {/* CARD INFERIOR */}
       <View style={styles.card}>
         <Text style={styles.title}>
           Cuidar do dinheiro pode{"\n"}ser fácil!
         </Text>
-
         <Text style={styles.subtitle}>
-          Cadastre-se, planeje o que você quer comprar e controle seus gastos como um expert!
+          Cadastre-se, planeje o que você quer comprar e controle seus gastos como
+          um expert!
         </Text>
 
-        <TouchableOpacity style={styles.button}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigation.navigate("SignUpOptions")}
+        >
           <Text style={styles.buttonText}>Cadastrar</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity>
+        <TouchableOpacity
+          onPress={() =>
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "Home" }],
+            })
+          }
+        >
           <Text style={styles.link}>Já sou cadastrado</Text>
         </TouchableOpacity>
       </View>
@@ -56,32 +62,25 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: "#2c3e50",
   },
 
-  background: {
+  backgroundImage: {
     position: "absolute",
     width: "100%",
     height: "100%",
-  },
-
-  imageContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 40,
-  },
-
-  image: {
-    width: "75%",
-    height: height * 0.45,
+    top: -200,
+    left: 0,
   },
 
   card: {
-    backgroundColor: "#020617",
+    backgroundColor: "rgba(10, 18, 49)",
     padding: 24,
     borderTopLeftRadius: 35,
     borderTopRightRadius: 35,
+    alignItems: "center",
+    zIndex: 10,
+    marginTop: "auto",
   },
 
   title: {
@@ -104,22 +103,25 @@ const styles = StyleSheet.create({
 
   button: {
     backgroundColor: "#34d399",
-    paddingVertical: 16,
-    borderRadius: 999, // deixa pill perfeita
+    paddingVertical: 12,
+    borderRadius: 999,
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
+    width: "100%",
+    maxWidth: 300,
   },
 
   buttonText: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "700",
   },
 
   link: {
     color: "#34d399",
     textAlign: "center",
-    fontSize: 16,
-    fontWeight: "500",
+    fontSize: 20,
+    fontWeight: "700",
+    marginTop: 2,
   },
 });
