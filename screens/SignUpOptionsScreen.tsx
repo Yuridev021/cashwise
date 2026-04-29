@@ -11,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 
 export default function SignUpOptionsScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
 
   return (
     <View style={styles.container}>
@@ -55,7 +55,7 @@ export default function SignUpOptionsScreen() {
 
 
       {/* LINK */}
-      <TouchableOpacity>
+      <TouchableOpacity onPress={() => navigation.navigate("SignInOptions")}>
         <Text style={styles.loginLink}>Entrar</Text>
       </TouchableOpacity>
 

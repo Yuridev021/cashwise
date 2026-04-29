@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import {
   View,
@@ -43,7 +44,7 @@ export default function SignUpFormScreen() {
           // Redirecionar para a tela Home
           navigation.reset({
             index: 0,
-            routes: [{ name: "Home" }],
+            routes: [{ name: "Home" as never }],
           });
         },
       },
@@ -188,7 +189,7 @@ const styles = StyleSheet.create({
 
   back: {
     marginTop: 50,
-    marginBottom: 30,
+    marginBottom: 10,
     width: 50,
     height: 50,
     backgroundColor: "#34d399",

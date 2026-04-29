@@ -44,14 +44,16 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() =>
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "Home" }],
-            })
-          }
+          onPress={() => navigation.navigate("SignInOptions")}
         >
           <Text style={styles.link}>Já sou cadastrado</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Home")}
+          style={styles.skipContainer}
+        >
+          <Text style={styles.skipText}>Continuar sem cadastro</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -123,5 +125,17 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     marginTop: 2,
+  },
+
+  skipContainer: {
+    marginTop: 20,
+    paddingVertical: 8,
+  },
+
+  skipText: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "500",
+    textAlign: "center",
   },
 });

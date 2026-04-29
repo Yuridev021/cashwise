@@ -5,17 +5,14 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { PieChart } from "react-native-svg-charts";
-
-
-const screenWidth = Dimensions.get("window").width;
+import { useNavigation } from "@react-navigation/native";
 
 export default function HomeScreen() {
   const [selectedMonth, setSelectedMonth] = useState("Fevereiro");
+  const navigation = useNavigation<any>();
 
   const categories = [
     { name: "Moradia", value: 1200.0, color: "#a855f7" },
@@ -25,17 +22,15 @@ export default function HomeScreen() {
   ];
 
   const totalExpenses = categories.reduce((sum, cat) => sum + cat.value, 0);
-  const data = categories.map((cat) => ({
-    value: cat.value,
-    svg: { fill: cat.color },
-  }));
-
-  const pieData = data.map((item) => item.value);
-
   return (
-    <ScrollView style={styles.container}>
-      {/* HEADER COM SALDO */}
-      <LinearGradient colors={["#3b82f6", "#1e40af"]} style={styles.header}>
+    <View style={styles.screen}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* HEADER COM SALDO */}
+        <LinearGradient colors={["#3b82f6", "#1e40af"]} style={styles.header}>
         <View style={styles.headerTop}>
           <View style={styles.monthSelector}>
             <TouchableOpacity style={styles.monthButton}>
@@ -44,7 +39,10 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.menuButton}>
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => navigation.navigate("UserSettings")}
+          >
             <Ionicons name="ellipsis-vertical" size={24} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -91,11 +89,12 @@ export default function HomeScreen() {
 
           <View style={styles.chartContainer}>
             <View style={styles.pieChartWrapper}>
-              <PieChart
-                style={{ height: 180, width: 180 }}
-                data={data}
-                innerRadius={50}
-              />
+              <View style={styles.chartPlaceholder}>
+                <Text style={styles.chartPlaceholderLabel}>Total</Text>
+                <Text style={styles.chartPlaceholderValue}>
+                  R$ {totalExpenses.toFixed(2)}
+                </Text>
+              </View>
             </View>
 
             <View style={styles.categoryList}>
@@ -180,8 +179,9 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View style={{ height: 80 }} />
       </View>
+
+      </ScrollView>
 
       {/* BOTTOM NAVIGATION */}
       <View style={styles.bottomNav}>
@@ -203,18 +203,28 @@ export default function HomeScreen() {
           <Ionicons name="pie-chart" size={24} color="#ccc" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem}>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => navigation.navigate("UserSettings")}
+        >
           <Ionicons name="menu" size={24} color="#ccc" />
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#f3f4f6",
+  },
   container: {
     flex: 1,
     backgroundColor: "#f3f4f6",
+  },
+  scrollContent: {
+    paddingBottom: 100,
   },
 
   header: {
@@ -341,6 +351,29 @@ const styles = StyleSheet.create({
   pieChartWrapper: {
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  chartPlaceholder: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    borderWidth: 12,
+    borderColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+
+  chartPlaceholderLabel: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 6,
+  },
+
+  chartPlaceholderValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1a1a1a",
   },
 
   categoryList: {
