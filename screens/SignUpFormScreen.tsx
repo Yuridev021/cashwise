@@ -8,19 +8,25 @@ import {
   TextInput,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useAuth } from "../context/AuthContext";
+import { firestore } from "../config/firebaseConfig";
+import { doc, setDoc } from "firebase/firestore";
 
 export default function SignUpFormScreen() {
   const navigation = useNavigation();
+  const { signup } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSignUp = () => {
+  const handleSignUp = async () => {
     if (!email || !password || !confirmPassword) {
       Alert.alert("Erro", "Por favor, preencha todos os campos");
       return;
@@ -36,19 +42,49 @@ export default function SignUpFormScreen() {
       return;
     }
 
-    // Cadastro realizado com sucesso
-    Alert.alert("Sucesso", "Cadastro realizado com sucesso!", [
-      {
-        text: "OK",
-        onPress: () => {
-          // Redirecionar para a tela Home
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "Home" as never }],
-          });
+    try {
+      setLoading(true);
+
+      // Criar usuário no Firebase Auth
+      const userCredential = await signup(email, password);
+      const userId = userCredential.user.uid;
+
+      // Salvar dados do usuário no Firestore
+      await setDoc(doc(firestore, "users", userId), {
+        email: email,
+        createdAt: new Date().toISOString(),
+        displayName: email.split("@")[0],
+      });
+
+      setLoading(false);
+
+      Alert.alert("Sucesso", "Cadastro realizado com sucesso!", [
+        {
+          text: "OK",
+          onPress: () => {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "Home" as never }],
+            });
+          },
         },
-      },
-    ]);
+      ]);
+    } catch (error: any) {
+      setLoading(false);
+      let errorMessage = "Erro ao criar conta";
+
+      if (error.code === "auth/email-already-in-use") {
+        errorMessage = "Este email já está cadastrado";
+      } else if (error.code === "auth/invalid-email") {
+        errorMessage = "Email inválido";
+      } else if (error.code === "auth/weak-password") {
+        errorMessage = "Senha muito fraca";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      Alert.alert("Erro", errorMessage);
+    }
   };
 
   return (
@@ -155,10 +191,15 @@ export default function SignUpFormScreen() {
 
         {/* BOTÃO CADASTRAR */}
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleSignUp}
+          disabled={loading}
         >
-          <Text style={styles.buttonText}>Cadastrar</Text>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Cadastrar</Text>
+          )}
         </TouchableOpacity>
 
         {/* LINK PARA LOGIN */}
@@ -263,6 +304,10 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
+  },
+
+  buttonDisabled: {
+    opacity: 0.6,
   },
 
   loginContainer: {
