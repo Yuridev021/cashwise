@@ -11,9 +11,8 @@ import {
 import { firestore } from '../config/firebaseConfig';
 import { Transaction, Card, FinancialData, getMonthYearFromDate } from '../types';
 
-/**
- * Configura listeners em tempo real para transações do usuário
- */
+// ─── Listeners ────────────────────────────────────────────────────────────────
+
 export const subscribeToTransactions = (
   userId: string,
   onDataChange: (transactions: Transaction[]) => void,
@@ -21,38 +20,26 @@ export const subscribeToTransactions = (
 ): (() => void) => {
   try {
     const ref = collection(firestore, 'finance', userId, 'transactions');
-
-    const unsubscribe = onSnapshot(
+    return onSnapshot(
       ref,
       (snapshot) => {
-        const transactions: Transaction[] = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        } as Transaction));
-
-        transactions.sort((a, b) => {
-          const dateA = a.createdAt?.toDate?.() || new Date(0);
-          const dateB = b.createdAt?.toDate?.() || new Date(0);
-          return dateB.getTime() - dateA.getTime();
-        });
-
+        const transactions: Transaction[] = snapshot.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() } as Transaction))
+          .sort((a, b) => {
+            const dateA = a.createdAt?.toDate?.() || new Date(0);
+            const dateB = b.createdAt?.toDate?.() || new Date(0);
+            return dateB.getTime() - dateA.getTime();
+          });
         onDataChange(transactions);
       },
-      (error) => {
-        onError('Erro ao carregar transações');
-      }
+      () => onError('Erro ao carregar transações')
     );
-
-    return unsubscribe;
-  } catch (error: any) {
+  } catch {
     onError('Erro ao configurar listener');
     return () => {};
   }
 };
 
-/**
- * Configura listeners em tempo real para cartões do usuário
- */
 export const subscribeToCards = (
   userId: string,
   onDataChange: (cards: Card[]) => void,
@@ -60,136 +47,112 @@ export const subscribeToCards = (
 ): (() => void) => {
   try {
     const ref = collection(firestore, 'finance', userId, 'cards');
-
-    const unsubscribe = onSnapshot(
+    return onSnapshot(
       ref,
       (snapshot) => {
         const cards: Card[] = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         } as Card));
-
         onDataChange(cards);
       },
-      (error) => {
-        onError('Erro ao carregar cartões');
-      }
+      () => onError('Erro ao carregar cartões')
     );
-
-    return unsubscribe;
-  } catch (error: any) {
+  } catch {
     onError('Erro ao configurar listener');
     return () => {};
   }
 };
 
-/**
- * Exclui uma transação do Firebase
- */
+// ─── CRUD ─────────────────────────────────────────────────────────────────────
+
 export const deleteTransaction = async (
   userId: string,
   transactionId: string
 ): Promise<void> => {
-  const ref = doc(firestore, 'finance', userId, 'transactions', transactionId);
-  await deleteDoc(ref);
+  await deleteDoc(doc(firestore, 'finance', userId, 'transactions', transactionId));
 };
 
-/**
- * Atualiza uma transação no Firebase
- */
 export const updateTransaction = async (
   userId: string,
   transactionId: string,
   data: Partial<Pick<Transaction, 'amount' | 'description' | 'category' | 'type'>>
 ): Promise<void> => {
-  const ref = doc(firestore, 'finance', userId, 'transactions', transactionId);
-  await updateDoc(ref, data);
+  await updateDoc(doc(firestore, 'finance', userId, 'transactions', transactionId), data);
+};
+
+// ─── Filtros ──────────────────────────────────────────────────────────────────
+
+export const filterTransactionsByMonth = (
+  transactions: Transaction[],
+  month: number,
+  year: number
+): Transaction[] =>
+  transactions.filter((t) => {
+    const { month: m, year: y } = getMonthYearFromDate(t.createdAt);
+    return m === month && y === year;
+  });
+
+/**
+ * Cartões com currentSpent calculado a partir das transações do mês.
+ * Se não houver cartões cadastrados, retorna array vazio
+ * (o totalCardSpent é calculado separadamente via calcularTotalCardSpent).
+ */
+export const filterCardsByMonth = (
+  cards: Card[],
+  transactions: Transaction[],
+  month: number,
+  year: number
+): Card[] => {
+  if (cards.length === 0) return [];
+
+  const monthTxs = filterTransactionsByMonth(transactions, month, year);
+
+  return cards.map((card) => {
+    const spent = monthTxs
+      .filter((t) => t.cardId === card.id)
+      .reduce((sum, t) => sum + t.amount, 0);
+    return { ...card, currentSpent: spent };
+  });
 };
 
 /**
- * Calcula os dados financeiros totais
+ * Calcula o total gasto em cartão no mês.
+ * Soma TODAS as transações com category === 'cartão',
+ * independente de ter cardId ou cartão cadastrado.
  */
+export const calcularTotalCardSpent = (
+  transactions: Transaction[],
+  month: number,
+  year: number
+): number => {
+  const monthTxs = filterTransactionsByMonth(transactions, month, year);
+  return monthTxs
+    .filter((t) => t.category === 'cartão')
+    .reduce((sum, t) => sum + t.amount, 0);
+};
+
+// ─── Cálculos financeiros ─────────────────────────────────────────────────────
+
 export const calculateFinancialData = (
   transactions: Transaction[],
-  cards: Card[]
+  cards: Card[],
+  totalCardSpent: number
 ): Omit<FinancialData, 'transactions' | 'cards'> => {
   const totalIncome = transactions
     .filter((t) => t.type === 'income')
     .reduce((sum, t) => sum + t.amount, 0);
 
+  // Despesas normais excluem transações de cartão (já contabilizadas em totalCardSpent)
   const totalExpense = transactions
-    .filter((t) => t.type === 'expense')
+    .filter((t) => t.type === 'expense' && t.category !== 'cartão')
     .reduce((sum, t) => sum + t.amount, 0);
-
-  const totalCardSpent = cards.reduce(
-    (sum, card) => sum + card.currentSpent,
-    0
-  );
 
   const currentBalance = totalIncome - totalExpense - totalCardSpent;
 
   return { totalIncome, totalExpense, totalCardSpent, currentBalance };
 };
 
-/**
- * Agrupa transações de despesa por categoria
- */
-export const groupExpensesByCategory = (
-  transactions: Transaction[]
-): Record<string, number> => {
-  const grouped: Record<string, number> = {};
-
-  transactions
-    .filter((t) => t.type === 'expense')
-    .forEach((t) => {
-      grouped[t.category] = (grouped[t.category] || 0) + t.amount;
-    });
-
-  return grouped;
-};
-
-/**
- * Obtém as últimas transações
- */
-export const getRecentTransactions = (
-  transactions: Transaction[],
-  limit: number = 5
-): Transaction[] => {
-  return transactions.slice(0, limit);
-};
-
-/**
- * Filtra transações por mês e ano
- */
-export const filterTransactionsByMonth = (
-  transactions: Transaction[],
-  month: number,
-  year: number
-): Transaction[] => {
-  return transactions.filter((t) => {
-    const { month: txMonth, year: txYear } = getMonthYearFromDate(t.createdAt);
-    return txMonth === month && txYear === year;
-  });
-};
-
-/**
- * Filtra cartões por mês e ano
- */
-export const filterCardsByMonth = (
-  cards: Card[],
-  month: number,
-  year: number
-): Card[] => {
-  return cards.filter((c) => {
-    const cardMonth = c.month ?? 0;
-    const cardYear = c.year ?? new Date().getFullYear();
-    return cardMonth === month && cardYear === year;
-  });
-};
-
-/**
- * Calcula dados financeiros para um mês específico
- */
 export const calculateFinancialDataByMonth = (
   transactions: Transaction[],
   cards: Card[],
@@ -197,42 +160,44 @@ export const calculateFinancialDataByMonth = (
   year: number
 ): Omit<FinancialData, 'transactions' | 'cards'> => {
   const monthTransactions = filterTransactionsByMonth(transactions, month, year);
-  const monthCards = filterCardsByMonth(cards, month, year);
-  return calculateFinancialData(monthTransactions, monthCards);
+  const monthCards        = filterCardsByMonth(cards, transactions, month, year);
+  const totalCardSpent    = calcularTotalCardSpent(transactions, month, year);
+  return calculateFinancialData(monthTransactions, monthCards, totalCardSpent);
 };
 
-/**
- * Salva o saldo manual do usuário no Firebase
- */
+// ─── Utilitários ──────────────────────────────────────────────────────────────
+
+export const groupExpensesByCategory = (
+  transactions: Transaction[]
+): Record<string, number> => {
+  const grouped: Record<string, number> = {};
+  transactions
+    .filter((t) => t.type === 'expense')
+    .forEach((t) => {
+      grouped[t.category] = (grouped[t.category] || 0) + t.amount;
+    });
+  return grouped;
+};
+
+export const getRecentTransactions = (
+  transactions: Transaction[],
+  limit = 5
+): Transaction[] => transactions.slice(0, limit);
+
 export const updateUserBalance = async (
   userId: string,
   newBalance: number
 ): Promise<void> => {
-  try {
-    const userBalanceRef = doc(firestore, 'finance', userId, 'metadata', 'balance');
-    await setDoc(userBalanceRef, {
-      savedBalance: newBalance,
-      updatedAt: new Date(),
-    }, { merge: true });
-  } catch (error) {
-    console.error('Erro ao salvar saldo:', error);
-    throw error;
-  }
+  const ref = doc(firestore, 'finance', userId, 'metadata', 'balance');
+  await setDoc(ref, { savedBalance: newBalance, updatedAt: new Date() }, { merge: true });
 };
 
-/**
- * Obtém o saldo manual salvo do usuário
- */
 export const getUserBalance = async (userId: string): Promise<number> => {
   try {
-    const userBalanceRef = doc(firestore, 'finance', userId, 'metadata', 'balance');
-    const docSnapshot = await getDoc(userBalanceRef);
-    if (docSnapshot.exists()) {
-      return docSnapshot.data()?.savedBalance ?? 0;
-    }
-    return 0;
-  } catch (error) {
-    console.error('Erro ao obter saldo:', error);
+    const ref  = doc(firestore, 'finance', userId, 'metadata', 'balance');
+    const snap = await getDoc(ref);
+    return snap.exists() ? (snap.data()?.savedBalance ?? 0) : 0;
+  } catch {
     return 0;
   }
 };

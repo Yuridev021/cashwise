@@ -1,4 +1,5 @@
-import React, { useMemo, useState, useCallback, useRef } from 'react';import {
+import React, { useMemo, useState, useCallback } from 'react';
+import {
   View,
   Text,
   StyleSheet,
@@ -10,8 +11,6 @@ import React, { useMemo, useState, useCallback, useRef } from 'react';import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Animated,
-  PanResponder,
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,8 +22,6 @@ import { deleteTransaction, updateTransaction } from '../utils/firebaseQueries';
 import { Transaction } from '../types';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const SWIPE_THRESHOLD = 60;
-const ACTION_WIDTH = 140; // largura total das duas ações
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -70,6 +67,117 @@ const INCOME_CATEGORIES = [
   { key: 'outros',       label: 'Outros'       },
 ];
 
+// ─── Action Sheet Modal ───────────────────────────────────────────────────────
+
+interface ActionSheetProps {
+  visible: boolean;
+  transaction: Transaction | null;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+const ActionSheet: React.FC<ActionSheetProps> = ({ visible, transaction, onClose, onEdit, onDelete }) => {
+  if (!transaction) return null;
+
+  const isIncome = transaction.type === 'income';
+  const color    = isIncome ? '#10b981' : '#ef4444';
+  const bgColor  = isIncome ? '#d1fae5' : '#fee2e2';
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <TouchableOpacity style={actionStyles.overlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={actionStyles.sheet}>
+          <View style={actionStyles.handle} />
+
+          {/* Preview da transação */}
+          <View style={actionStyles.preview}>
+            <View style={[actionStyles.previewIcon, { backgroundColor: bgColor }]}>
+              <Ionicons name={isIncome ? 'arrow-down' : 'arrow-up'} size={18} color={color} />
+            </View>
+            <View style={actionStyles.previewInfo}>
+              <Text style={actionStyles.previewDescription} numberOfLines={1}>
+                {transaction.description}
+              </Text>
+              <Text style={actionStyles.previewCategory}>{transaction.category}</Text>
+            </View>
+            <Text style={[actionStyles.previewAmount, { color }]}>
+              {isIncome ? '+' : '-'} {formatCurrency(transaction.amount)}
+            </Text>
+          </View>
+
+          <View style={actionStyles.divider} />
+
+          {/* Ações */}
+          <TouchableOpacity style={actionStyles.action} onPress={onEdit}>
+            <View style={[actionStyles.actionIcon, { backgroundColor: '#eff6ff' }]}>
+              <Ionicons name="pencil-outline" size={20} color="#3b82f6" />
+            </View>
+            <Text style={[actionStyles.actionText, { color: '#3b82f6' }]}>Editar transação</Text>
+            <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={actionStyles.action} onPress={onDelete}>
+            <View style={[actionStyles.actionIcon, { backgroundColor: '#fef2f2' }]}>
+              <Ionicons name="trash-outline" size={20} color="#ef4444" />
+            </View>
+            <Text style={[actionStyles.actionText, { color: '#ef4444' }]}>Excluir transação</Text>
+            <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={actionStyles.cancelButton} onPress={onClose}>
+            <Text style={actionStyles.cancelText}>Cancelar</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
+const actionStyles = StyleSheet.create({
+  overlay: {
+    flex: 1, justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  sheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingTop: 12, paddingBottom: 36, paddingHorizontal: 20,
+  },
+  handle: {
+    width: 40, height: 4, backgroundColor: '#e5e7eb',
+    borderRadius: 2, alignSelf: 'center', marginBottom: 20,
+  },
+  preview: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#f9fafb', borderRadius: 14, padding: 14,
+    marginBottom: 16,
+  },
+  previewIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  previewInfo: { flex: 1 },
+  previewDescription: { fontSize: 14, color: '#1f2937', fontWeight: '600' },
+  previewCategory:    { fontSize: 12, color: '#9ca3af', marginTop: 2 },
+  previewAmount:      { fontSize: 15, fontWeight: '800' },
+  divider: { height: 1, backgroundColor: '#f3f4f6', marginBottom: 8 },
+  action: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingVertical: 14,
+  },
+  actionIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  actionText:   { flex: 1, fontSize: 15, fontWeight: '600' },
+  cancelButton: {
+    marginTop: 8, paddingVertical: 16,
+    backgroundColor: '#f3f4f6', borderRadius: 14, alignItems: 'center',
+  },
+  cancelText: { fontSize: 15, fontWeight: '700', color: '#6b7280' },
+});
+
 // ─── Edit Modal ───────────────────────────────────────────────────────────────
 
 interface EditModalProps {
@@ -81,10 +189,10 @@ interface EditModalProps {
 
 const EditModal: React.FC<EditModalProps> = ({ visible, transaction, onClose, onSave }) => {
   const [description, setDescription] = useState('');
-  const [rawAmount, setRawAmount] = useState('');
-  const [category, setCategory] = useState('');
-  const [type, setType] = useState<'income' | 'expense'>('expense');
-  const [loading, setLoading] = useState(false);
+  const [rawAmount, setRawAmount]     = useState('');
+  const [category, setCategory]       = useState('');
+  const [type, setType]               = useState<'income' | 'expense'>('expense');
+  const [loading, setLoading]         = useState(false);
 
   React.useEffect(() => {
     if (transaction) {
@@ -95,9 +203,9 @@ const EditModal: React.FC<EditModalProps> = ({ visible, transaction, onClose, on
     }
   }, [transaction]);
 
-  const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const categories  = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
   const displayAmount = formatDisplay(rawAmount);
-  const activeColor = type === 'income' ? '#10b981' : '#ef4444';
+  const activeColor   = type === 'income' ? '#10b981' : '#ef4444';
 
   const handleSave = async () => {
     if (!transaction) return;
@@ -139,7 +247,7 @@ const EditModal: React.FC<EditModalProps> = ({ visible, transaction, onClose, on
                 key={t}
                 style={[modalStyles.typeTab, type === t && {
                   backgroundColor: t === 'income' ? '#10b981' : '#ef4444',
-                  borderColor: t === 'income' ? '#10b981' : '#ef4444',
+                  borderColor:     t === 'income' ? '#10b981' : '#ef4444',
                 }]}
                 onPress={() => { setType(t); setCategory(''); }}
               >
@@ -223,10 +331,9 @@ const modalStyles = StyleSheet.create({
   amountRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: '#f9fafb', borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 10,
-    borderWidth: 1.5,
+    paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1.5,
   },
-  currency: { fontSize: 20, fontWeight: '700' },
+  currency:    { fontSize: 20, fontWeight: '700' },
   amountInput: { flex: 1, fontSize: 26, fontWeight: '700' },
   input: {
     backgroundColor: '#f9fafb', borderRadius: 12,
@@ -234,192 +341,78 @@ const modalStyles = StyleSheet.create({
     fontSize: 14, color: '#1f2937',
     borderWidth: 1, borderColor: '#e5e7eb',
   },
-  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  categoryGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   categoryChip: {
     paddingHorizontal: 12, paddingVertical: 7,
     borderRadius: 20, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#fff',
   },
   categoryChipText: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
-  saveButton: {
-    borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 20,
-  },
-  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  saveButton:       { borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 20 },
+  saveButtonText:   { color: '#fff', fontSize: 16, fontWeight: '700' },
 });
 
-// ─── Swipeable Transaction Item ───────────────────────────────────────────────
+// ─── Transaction Item ─────────────────────────────────────────────────────────
 
-interface SwipeableItemProps {
+interface TransactionItemProps {
   transaction: Transaction;
-  onEdit: (t: Transaction) => void;
-  onDelete: (t: Transaction) => void;
+  onPress: (t: Transaction) => void;
 }
 
-const SwipeableItem: React.FC<SwipeableItemProps> = ({ transaction, onEdit, onDelete }) => {
+const TransactionItem: React.FC<TransactionItemProps> = ({ transaction, onPress }) => {
   const isIncome = transaction.type === 'income';
-  const color = isIncome ? '#10b981' : '#ef4444';
-  const bgColor = isIncome ? '#d1fae5' : '#fee2e2';
-
-  const translateX = useRef(new Animated.Value(0)).current;
-  const isOpen = useRef(false);
-  const currentVal = useRef(0);
-
-  // Rastreia valor atual sem precisar de listener pesado
-  React.useEffect(() => {
-    const id = translateX.addListener(({ value }) => { currentVal.current = value; });
-    return () => translateX.removeListener(id);
-  }, []);
-
-  const animateTo = useCallback((toValue: number, velocity = 0) => {
-    Animated.spring(translateX, {
-      toValue,
-      useNativeDriver: true,
-      bounciness: 0,        // sem bounce — movimento limpo
-      speed: 20,            // resposta rápida
-      velocity,             // usa a velocidade do gesto para continuidade
-    }).start();
-  }, []);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, g) =>
-        Math.abs(g.dx) > 6 && Math.abs(g.dy) < 15,
-
-      onPanResponderGrant: () => {
-        // para qualquer animação em curso antes de novo gesto
-        translateX.stopAnimation();
-      },
-
-      onPanResponderMove: (_, g) => {
-        const base = isOpen.current ? -ACTION_WIDTH : 0;
-        const raw = base + g.dx;
-        // limita: não passa de 0 (direita) nem de -ACTION_WIDTH (esquerda)
-        const clamped = Math.max(-ACTION_WIDTH, Math.min(0, raw));
-        translateX.setValue(clamped);
-      },
-
-      onPanResponderRelease: (_, g) => {
-        const vel = g.vx; // velocidade horizontal em px/ms
-
-        if (!isOpen.current) {
-          // decide abrir se arrastou suficiente OU com velocidade
-          if (g.dx < -SWIPE_THRESHOLD || vel < -0.3) {
-            animateTo(-ACTION_WIDTH, vel);
-            isOpen.current = true;
-          } else {
-            // sempre fecha ao soltar sem swipe suficiente
-            animateTo(0, vel);
-            isOpen.current = false;
-          }
-        } else {
-          // está aberto: fecha se arrastou para direita ou velocidade positiva
-          if (g.dx > SWIPE_THRESHOLD / 2 || vel > 0.3) {
-            animateTo(0, vel);
-            isOpen.current = false;
-          } else {
-            animateTo(-ACTION_WIDTH, vel);
-            isOpen.current = true;
-          }
-        }
-      },
-
-      onPanResponderTerminate: () => {
-        // se gesture cancelado (ex: scroll vertical), sempre fecha
-        animateTo(0);
-        isOpen.current = false;
-      },
-    })
-  ).current;
-
-  const close = useCallback(() => {
-    animateTo(0);
-    isOpen.current = false;
-  }, [animateTo]);
+  const color    = isIncome ? '#10b981' : '#ef4444';
+  const bgColor  = isIncome ? '#d1fae5' : '#fee2e2';
 
   return (
-    <View style={swipeStyles.wrapper}>
-      {/* Ações atrás */}
-      <View style={swipeStyles.actions}>
-        <TouchableOpacity
-          style={swipeStyles.editAction}
-          onPress={() => { close(); onEdit(transaction); }}
-        >
-          <Ionicons name="pencil" size={20} color="#fff" />
-          <Text style={swipeStyles.actionText}>Editar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={swipeStyles.deleteAction}
-          onPress={() => { close(); onDelete(transaction); }}
-        >
-          <Ionicons name="trash" size={20} color="#fff" />
-          <Text style={swipeStyles.actionText}>Excluir</Text>
-        </TouchableOpacity>
+    <TouchableOpacity
+      style={itemStyles.card}
+      onPress={() => onPress(transaction)}
+      activeOpacity={0.7}
+    >
+      <View style={[itemStyles.icon, { backgroundColor: bgColor }]}>
+        <Ionicons name={isIncome ? 'arrow-down' : 'arrow-up'} size={15} color={color} />
       </View>
-
-      {/* Card deslizável */}
-      <Animated.View
-        style={[swipeStyles.card, { transform: [{ translateX }] }]}
-        {...panResponder.panHandlers}
-      >
-        <View style={[styles.txIcon, { backgroundColor: bgColor }]}>
-          <Ionicons name={isIncome ? 'arrow-down' : 'arrow-up'} size={15} color={color} />
-        </View>
-        <View style={styles.txContent}>
-          <Text style={styles.txCategory}>{transaction.category}</Text>
-          <Text style={styles.txDescription} numberOfLines={1}>{transaction.description}</Text>
-        </View>
-        <View style={styles.txRight}>
-          <Text style={[styles.txAmount, { color }]}>
-            {isIncome ? '+' : '-'} {formatCurrency(transaction.amount)}
-          </Text>
-          <Text style={styles.txDate}>{formatDate(transaction.createdAt)}</Text>
-        </View>
-      </Animated.View>
-    </View>
+      <View style={itemStyles.content}>
+        <Text style={itemStyles.category}>{transaction.category}</Text>
+        <Text style={itemStyles.description} numberOfLines={1}>{transaction.description}</Text>
+      </View>
+      <View style={itemStyles.right}>
+        <Text style={[itemStyles.amount, { color }]}>
+          {isIncome ? '+' : '-'} {formatCurrency(transaction.amount)}
+        </Text>
+        <Text style={itemStyles.date}>{formatDate(transaction.createdAt)}</Text>
+      </View>
+      {/* Indicador visual de que é clicável */}
+      <Ionicons name="ellipsis-vertical" size={16} color="#d1d5db" style={{ marginLeft: 4 }} />
+    </TouchableOpacity>
   );
 };
 
-const swipeStyles = StyleSheet.create({
-  wrapper: {
-    position: 'relative',
-    borderRadius: 14,
-    overflow: 'hidden',
-    marginBottom: 0,
-  },
-  actions: {
-    position: 'absolute',
-    right: 0, top: 0, bottom: 0,
-    width: ACTION_WIDTH,
-    flexDirection: 'row',
-  },
-  editAction: {
-    flex: 1, backgroundColor: '#3b82f6',
-    justifyContent: 'center', alignItems: 'center', gap: 4,
-  },
-  deleteAction: {
-    flex: 1, backgroundColor: '#ef4444',
-    justifyContent: 'center', alignItems: 'center', gap: 4,
-  },
-  actionText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+const itemStyles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    backgroundColor: '#fff', borderRadius: 14, padding: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
   },
+  icon:        { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  content:     { flex: 1 },
+  category:    { fontSize: 13, color: '#1f2937', fontWeight: '600', marginBottom: 2 },
+  description: { fontSize: 11, color: '#9ca3af' },
+  right:       { alignItems: 'flex-end' },
+  amount:      { fontSize: 13, fontWeight: '700', marginBottom: 2 },
+  date:        { fontSize: 10, color: '#d1d5db' },
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function TransactionsScreen() {
   const navigation = useNavigation<any>();
-  const { user } = useAuth();
-  const { data } = useFinance();
+  const { user }   = useAuth();
+  const { data }   = useFinance();
 
-  const [filter, setFilter] = useState<FilterType>('all');
-  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [filter, setFilter]             = useState<FilterType>('all');
+  const [selectedTx, setSelectedTx]     = useState<Transaction | null>(null);
+  const [actionVisible, setActionVisible] = useState(false);
+  const [editingTx, setEditingTx]       = useState<Transaction | null>(null);
 
   const filtered = useMemo(() => {
     const txs = data?.transactions || [];
@@ -436,10 +429,27 @@ export default function TransactionsScreen() {
     [data?.transactions]
   );
 
-  const handleDelete = useCallback((tx: Transaction) => {
+  const handlePressItem = useCallback((tx: Transaction) => {
+    setSelectedTx(tx);
+    setActionVisible(true);
+  }, []);
+
+  const handleCloseAction = useCallback(() => {
+    setActionVisible(false);
+  }, []);
+
+  const handleEditFromAction = useCallback(() => {
+    setActionVisible(false);
+    // pequeno delay para o sheet fechar antes de abrir o edit modal
+    setTimeout(() => setEditingTx(selectedTx), 300);
+  }, [selectedTx]);
+
+  const handleDeleteFromAction = useCallback(() => {
+    setActionVisible(false);
+    if (!selectedTx) return;
     Alert.alert(
       'Excluir transação',
-      `Deseja excluir "${tx.description}"?`,
+      `Deseja excluir "${selectedTx.description}"?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -447,7 +457,7 @@ export default function TransactionsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteTransaction(user!.uid, tx.id);
+              await deleteTransaction(user!.uid, selectedTx.id);
             } catch {
               Alert.alert('Erro', 'Não foi possível excluir a transação.');
             }
@@ -455,10 +465,10 @@ export default function TransactionsScreen() {
         },
       ]
     );
-  }, [user]);
+  }, [selectedTx, user]);
 
-  const handleUpdate = useCallback(async (id: string, data: Partial<Transaction>) => {
-    await updateTransaction(user!.uid, id, data);
+  const handleUpdate = useCallback(async (id: string, updatedData: Partial<Transaction>) => {
+    await updateTransaction(user!.uid, id, updatedData);
   }, [user]);
 
   return (
@@ -503,12 +513,6 @@ export default function TransactionsScreen() {
         </View>
       </LinearGradient>
 
-      {/* Dica */}
-      <View style={styles.hintBanner}>
-        <Ionicons name="swap-horizontal-outline" size={14} color="#6b7280" />
-        <Text style={styles.hintText}>Arraste para a esquerda para editar ou excluir</Text>
-      </View>
-
       {filtered.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="receipt-outline" size={48} color="#d1d5db" />
@@ -520,11 +524,7 @@ export default function TransactionsScreen() {
           data={filtered}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
-            <SwipeableItem
-              transaction={item}
-              onEdit={setEditingTx}
-              onDelete={handleDelete}
-            />
+            <TransactionItem transaction={item} onPress={handlePressItem} />
           )}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -532,6 +532,16 @@ export default function TransactionsScreen() {
         />
       )}
 
+      {/* Action Sheet — toque na transação */}
+      <ActionSheet
+        visible={actionVisible}
+        transaction={selectedTx}
+        onClose={handleCloseAction}
+        onEdit={handleEditFromAction}
+        onDelete={handleDeleteFromAction}
+      />
+
+      {/* Edit Modal */}
       <EditModal
         visible={!!editingTx}
         transaction={editingTx}
@@ -558,10 +568,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 16, padding: 16, marginBottom: 16,
   },
-  summaryItem: { flex: 1, alignItems: 'center' },
-  summaryLabel: { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginBottom: 4 },
-  summaryValue: { fontSize: 14, color: '#fff', fontWeight: '800' },
-  summaryDivider: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.2)' },
+  summaryItem:   { flex: 1, alignItems: 'center' },
+  summaryLabel:  { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginBottom: 4 },
+  summaryValue:  { fontSize: 14, color: '#fff', fontWeight: '800' },
+  summaryDivider:{ width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.2)' },
 
   filterRow: { flexDirection: 'row' },
   filterTab: {
@@ -570,24 +580,9 @@ const styles = StyleSheet.create({
   },
   filterText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.6)' },
 
-  hintBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 16, paddingVertical: 8,
-    backgroundColor: '#f9fafb', borderBottomWidth: 1, borderBottomColor: '#e5e7eb',
-  },
-  hintText: { fontSize: 11, color: '#9ca3af' },
-
   listContent: { padding: 16, paddingBottom: 40 },
 
-  txIcon: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  txContent: { flex: 1 },
-  txCategory: { fontSize: 13, color: '#1f2937', fontWeight: '600', marginBottom: 2 },
-  txDescription: { fontSize: 11, color: '#9ca3af' },
-  txRight: { alignItems: 'flex-end' },
-  txAmount: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
-  txDate: { fontSize: 10, color: '#d1d5db' },
-
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
+  empty:      { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
   emptyTitle: { fontSize: 16, color: '#374151', fontWeight: '700' },
-  emptyText: { fontSize: 13, color: '#9ca3af' },
+  emptyText:  { fontSize: 13, color: '#9ca3af' },
 });

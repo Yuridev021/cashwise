@@ -51,7 +51,7 @@ const TYPE_TABS: { key: TransactionType; label: string; color: string }[] = [
   { key: 'card',    label: 'Cartão',   color: '#f59e0b' },
 ];
 
-const DAYS = Array.from({ length: 28 }, (_, i) => i + 1); // 1-28 (seguro para todos os meses)
+const DAYS = Array.from({ length: 28 }, (_, i) => i + 1);
 
 const formatDisplay = (raw: string): string => {
   const digits = raw.replace(/\D/g, '');
@@ -125,10 +125,6 @@ export default function AddTransactionScreen() {
       Alert.alert('Categoria obrigatória', 'Selecione uma categoria.');
       return;
     }
-    if (type === 'card' && !selectedCard) {
-      Alert.alert('Cartão obrigatório', 'Selecione um cartão.');
-      return;
-    }
     if (!description.trim()) {
       Alert.alert('Descrição obrigatória', 'Informe uma descrição.');
       return;
@@ -140,6 +136,8 @@ export default function AddTransactionScreen() {
 
     setLoading(true);
     try {
+      const now = new Date();
+
       const payload: Record<string, any> = {
         userId:      user.uid,
         type:        type === 'card' ? 'expense' : type,
@@ -151,10 +149,17 @@ export default function AddTransactionScreen() {
       };
 
       if (recurring) {
-        payload.recurringDay = recurringDay;
+        // Salva apenas como transação-modelo (isRecurringTemplate = true).
+        // O FinanceContext (generateRecurringForMonth) é responsável por criar
+        // as cópias mensais — não salvamos uma instância avulsa aqui para evitar
+        // duplicação no mês corrente.
+        payload.recurringDay  = recurringDay;
+        payload.isRecurringTemplate = true;
+        payload.recurringStartMonth = now.getMonth() + 1; // 1-12
+        payload.recurringStartYear  = now.getFullYear();
       }
 
-      if (type === 'card') {
+      if (type === 'card' && selectedCard) {
         payload.cardId = selectedCard;
       }
 
@@ -249,12 +254,22 @@ export default function AddTransactionScreen() {
           </View>
         )}
 
-        {/* Cartão */}
+        {/* Cartão — seleção opcional */}
         {type === 'card' && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>CARTÃO</Text>
+            <Text style={styles.sectionTitle}>CARTÃO (OPCIONAL)</Text>
             {data?.cards && data.cards.length > 0 ? (
               <View style={styles.categoryGrid}>
+                {/* Chip "Nenhum" para desmarcar o cartão selecionado */}
+                <TouchableOpacity
+                  style={[styles.categoryChip, selectedCard === '' && { backgroundColor: '#6b7280', borderColor: '#6b7280' }]}
+                  onPress={() => setSelectedCard('')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close-circle-outline" size={16} color={selectedCard === '' ? '#fff' : '#6b7280'} />
+                  <Text style={[styles.categoryChipText, selectedCard === '' && { color: '#fff' }]}>Nenhum</Text>
+                </TouchableOpacity>
+
                 {data.cards.map((card) => {
                   const isActive = selectedCard === card.id;
                   return (
@@ -271,12 +286,12 @@ export default function AddTransactionScreen() {
                 })}
               </View>
             ) : (
-              <Text style={styles.emptyText}>Nenhum cartão cadastrado.</Text>
+              <Text style={styles.emptyText}>Nenhum cartão cadastrado. A despesa será salva sem vínculo a cartão.</Text>
             )}
           </View>
         )}
 
-        {/* Recorrência — não aparece para cartão */}
+        {/* Recorrência */}
         {type !== 'card' && (
           <View style={styles.section}>
             <View style={styles.recurringRow}>
@@ -297,12 +312,9 @@ export default function AddTransactionScreen() {
               />
             </View>
 
-            {/* Seletor de dia — só aparece quando recorrente ativo */}
             {recurring && (
               <View style={styles.dayPickerWrap}>
-                <Text style={styles.dayPickerLabel}>
-                  Repetir todo dia:
-                </Text>
+                <Text style={styles.dayPickerLabel}>Repetir todo dia:</Text>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
@@ -404,7 +416,6 @@ const styles = StyleSheet.create({
   categoryChipText: { fontSize: 13, fontWeight: '600', color: '#6b7280' },
   emptyText: { color: '#9ca3af', fontSize: 13 },
 
-  // Recorrência
   recurringRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#fff', borderRadius: 14, padding: 14,

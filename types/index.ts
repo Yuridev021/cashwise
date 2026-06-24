@@ -11,20 +11,24 @@ export interface Transaction {
   month?: number;
   year?: number;
   // ── Recorrência ──────────────────────────────
-  recurring?: boolean;        // true = transação recorrente
-  recurringDay?: number;      // dia do mês (1-31) em que se repete
-  recurringId?: string;       // ID da transação original (nas cópias geradas)
+  recurring?: boolean;
+  recurringDay?: number;
+  recurringId?: string;
+  isRecurringTemplate?: boolean;
+  recurringStartMonth?: number;
+  recurringStartYear?: number;
+  // ── Cartão ───────────────────────────────────
+  cardId?: string;            // ID do cartão vinculado (opcional)
 }
 
 export interface Card {
   id: string;
   name: string;
   limit: number;
-  currentSpent: number;
   closingDate: number;
   userId: string;
-  month?: number;
-  year?: number;
+  // currentSpent é calculado dinamicamente a partir das transações do mês
+  currentSpent?: number;
 }
 
 export interface FinancialData {
@@ -33,7 +37,7 @@ export interface FinancialData {
   totalCardSpent: number;
   currentBalance: number;
   transactions: Transaction[];
-  cards: Card[];
+  cards: Card[];           // cartões com currentSpent já calculado para o mês
 }
 
 export interface FinanceContextType {

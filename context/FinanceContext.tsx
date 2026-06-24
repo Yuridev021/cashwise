@@ -6,15 +6,15 @@ import React, {
   useCallback,
   ReactNode,
 } from 'react';
-import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc } from 'firebase/firestore';
 import { firestore } from '../config/firebaseConfig';
 import {
   subscribeToTransactions,
   subscribeToCards,
-  calculateFinancialData,
   calculateFinancialDataByMonth,
   filterTransactionsByMonth,
   filterCardsByMonth,
+  calcularTotalCardSpent,
   updateUserBalance,
   getUserBalance,
 } from '../utils/firebaseQueries';
@@ -22,7 +22,7 @@ import { FinancialData, FinanceContextType, Transaction, Card } from '../types';
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
-// ─── Helper: gera recorrentes do mês atual se ainda não existirem ─────────────
+// ─── Gera cópias mensais a partir dos templates recorrentes ──────────────────
 
 const generateRecurringForMonth = async (
   userId: string,
@@ -30,48 +30,46 @@ const generateRecurringForMonth = async (
   month: number,
   year: number
 ) => {
-  // Pega todas as transações marcadas como recorrentes (originais)
-  const recurringOriginals = allTransactions.filter(
-    (t) => t.recurring === true && !t.recurringId
+  const templates = allTransactions.filter(
+    (t) => t.recurring === true && t.isRecurringTemplate === true
+  );
+  if (templates.length === 0) return;
+
+  const alreadyGeneratedIds = new Set(
+    allTransactions
+      .filter((t) => t.recurringId && t.month === month && t.year === year)
+      .map((t) => t.recurringId)
   );
 
-  if (recurringOriginals.length === 0) return;
+  for (const template of templates) {
+    if (alreadyGeneratedIds.has(template.id)) continue;
 
-  // Verifica quais já foram geradas neste mês/ano
-  const alreadyGenerated = allTransactions.filter(
-    (t) => t.recurringId && t.month === month && t.year === year
-  ).map((t) => t.recurringId);
+    const startMonth: number = template.recurringStartMonth ?? (() => {
+      const d = template.createdAt?.toDate?.() || new Date(template.createdAt ?? Date.now());
+      return d.getMonth();
+    })();
+    const startYear: number = template.recurringStartYear ?? (() => {
+      const d = template.createdAt?.toDate?.() || new Date(template.createdAt ?? Date.now());
+      return d.getFullYear();
+    })();
 
-  for (const original of recurringOriginals) {
-    // Pula se já foi gerada para este mês
-    if (alreadyGenerated.includes(original.id)) continue;
+    const targetDate   = new Date(year, month, 1);
+    const creationDate = new Date(startYear, startMonth, 1);
+    if (targetDate <= creationDate) continue;
 
-    // Não duplica o próprio mês de criação
-    const createdAt = original.createdAt?.toDate?.() || new Date(original.createdAt);
-    const createdMonth = createdAt.getMonth();
-    const createdYear = createdAt.getFullYear();
-    if (createdMonth === month && createdYear === year) continue;
-
-    // Não gera para meses no passado antes da criação
-    const targetDate = new Date(year, month, 1);
-    const creationDate = new Date(createdYear, createdMonth, 1);
-    if (targetDate < creationDate) continue;
-
-    // Cria a cópia da transação para este mês
-    const day = Math.min(original.recurringDay || 1, 28);
-    const recurringDate = new Date(year, month, day);
-
+    const day = Math.min(template.recurringDay || 1, 28);
     await addDoc(collection(firestore, 'finance', userId, 'transactions'), {
-      userId:      userId,
-      type:        original.type,
-      amount:      original.amount,
-      category:    original.category,
-      description: original.description,
-      createdAt:   recurringDate,
-      month:       month,
-      year:        year,
-      recurring:   false,         // cópia não é "original"
-      recurringId: original.id,   // referência ao original
+      userId,
+      type:                template.type,
+      amount:              template.amount,
+      category:            template.category,
+      description:         template.description,
+      createdAt:           new Date(year, month, day),
+      month,
+      year,
+      recurring:           false,
+      isRecurringTemplate: false,
+      recurringId:         template.id,
     });
   }
 };
@@ -82,94 +80,78 @@ export const FinanceProvider: React.FC<{ children: ReactNode; userId: string }> 
   children,
   userId,
 }) => {
-  const [data, setData] = useState<FinancialData | null>(null);
+  const [data, setData]       = useState<FinancialData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [cards, setCards] = useState<Card[]>([]);
+  const [cards, setCards]               = useState<Card[]>([]);
 
   const today = new Date();
   const [currentMonth, setCurrentMonthState] = useState(today.getMonth());
-  const [currentYear, setCurrentYearState] = useState(today.getFullYear());
+  const [currentYear,  setCurrentYearState]  = useState(today.getFullYear());
   const [balanceSavedBalance, setBalanceSavedBalance] = useState(0);
-  const [recurringGenerated, setRecurringGenerated] = useState(false);
+  const [recurringKey, setRecurringKey] = useState('');
 
   const setCurrentMonth = useCallback((month: number, year: number) => {
     setCurrentMonthState(month);
     setCurrentYearState(year);
-    setRecurringGenerated(false); // força re-check ao mudar mês
   }, []);
 
   const updateBalance = useCallback(async (newBalance: number, userId_: string) => {
-    try {
-      await updateUserBalance(userId_, newBalance);
-      setBalanceSavedBalance(newBalance);
-    } catch (err) {
-      console.error('Erro ao atualizar saldo:', err);
-      throw err;
-    }
+    await updateUserBalance(userId_, newBalance);
+    setBalanceSavedBalance(newBalance);
   }, []);
 
-  const handleTransactionsChange = useCallback((newTransactions: Transaction[]) => {
-    setTransactions(newTransactions);
+  const handleError = useCallback((msg: string) => {
+    setError(msg.includes('Missing or insufficient permissions')
+      ? '⚠️ Security Rules não configuradas.'
+      : msg);
   }, []);
 
-  const handleCardsChange = useCallback((newCards: Card[]) => {
-    setCards(newCards);
-  }, []);
-
-  const handleError = useCallback((errorMessage: string) => {
-    if (errorMessage.includes('Missing or insufficient permissions')) {
-      setError('⚠️ Security Rules não configuradas.');
-    } else {
-      setError(errorMessage);
-    }
-  }, []);
-
-  // Carrega saldo salvo
   useEffect(() => {
     if (!userId) { setLoading(false); return; }
-    getUserBalance(userId)
-      .then(setBalanceSavedBalance)
-      .catch(() => {});
+    getUserBalance(userId).then(setBalanceSavedBalance).catch(() => {});
   }, [userId]);
 
-  // Subscribe transações e cartões
   useEffect(() => {
     if (!userId) { setLoading(false); return; }
-
     setLoading(true);
     setError(null);
-
-    const unsubTx   = subscribeToTransactions(userId, handleTransactionsChange, handleError);
-    const unsubCard = subscribeToCards(userId, handleCardsChange, handleError);
-
+    const unsubTx   = subscribeToTransactions(userId, setTransactions, handleError);
+    const unsubCard = subscribeToCards(userId, setCards, handleError);
     return () => { unsubTx(); unsubCard(); };
-  }, [userId, handleTransactionsChange, handleCardsChange, handleError]);
+  }, [userId, handleError]);
 
-  // Gera recorrentes quando transactions carregam ou mês muda
+  // Gera recorrentes — uma vez por userId+mês+ano
   useEffect(() => {
-    if (!userId || transactions.length === 0 || recurringGenerated) return;
-
+    if (!userId || transactions.length === 0) return;
+    const key = `${userId}-${currentMonth}-${currentYear}`;
+    if (recurringKey === key) return;
     generateRecurringForMonth(userId, transactions, currentMonth, currentYear)
-      .then(() => setRecurringGenerated(true))
-      .catch((err) => console.error('Erro ao gerar recorrentes:', err));
-  }, [userId, transactions, currentMonth, currentYear, recurringGenerated]);
+      .then(() => setRecurringKey(key))
+      .catch(console.error);
+  }, [userId, transactions, currentMonth, currentYear, recurringKey]);
 
-  // Calcula dados do mês selecionado
+  // Calcula dados do mês
   useEffect(() => {
     const monthTransactions = filterTransactionsByMonth(transactions, currentMonth, currentYear);
-    const monthCards        = filterCardsByMonth(cards, currentMonth, currentYear);
-    const monthData         = calculateFinancialDataByMonth(transactions, cards, currentMonth, currentYear);
+    const monthCards        = filterCardsByMonth(cards, transactions, currentMonth, currentYear);
 
-    let finalBalance = monthData.currentBalance;
-    if (monthTransactions.length === 0 && monthCards.length === 0) {
-      finalBalance = balanceSavedBalance;
-    }
+    // totalCardSpent soma TODAS as transações com category 'cartão' do mês,
+    // independente de ter cartão cadastrado no Firestore
+    const totalCardSpent = calcularTotalCardSpent(transactions, currentMonth, currentYear);
+
+    const monthData = calculateFinancialDataByMonth(transactions, cards, currentMonth, currentYear);
+
+    const finalBalance =
+      monthTransactions.length === 0 && monthCards.length === 0 && totalCardSpent === 0
+        ? balanceSavedBalance
+        : monthData.currentBalance;
 
     setData({
       ...monthData,
+      totalCardSpent,        // garante que usa o valor calculado diretamente das transações
       currentBalance: finalBalance,
       transactions:   monthTransactions,
       cards:          monthCards,
@@ -178,12 +160,7 @@ export const FinanceProvider: React.FC<{ children: ReactNode; userId: string }> 
   }, [transactions, cards, currentMonth, currentYear, balanceSavedBalance]);
 
   const refreshData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setRecurringGenerated(false); // re-verifica recorrentes no refresh
-    return new Promise<void>((resolve) => {
-      setTimeout(() => { setLoading(false); resolve(); }, 500);
-    });
+    return new Promise<void>((resolve) => setTimeout(resolve, 300));
   }, []);
 
   return (
