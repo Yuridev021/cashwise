@@ -105,10 +105,6 @@ export default function SignInOptionsScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.socialButtonGoogle} disabled>
-          <Ionicons name="logo-google" size={20} color="#111827" />
-          <Text style={styles.socialText}>Continuar com Google</Text>
-        </TouchableOpacity>
 
 
         <Text style={styles.footer}>
@@ -152,16 +148,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "#555",
     marginBottom: 30,
-  },
-  socialButtonGoogle: {
-    height: 56,
-    borderRadius: 30,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    marginBottom: 15,
-    gap: 10,
   },
   socialText: {
     fontSize: 16,

@@ -256,7 +256,7 @@ export default function HomeScreen() {
   const [dismissedError, setDismissedError] = useState(false);
   const [editBalanceModalVisible, setEditBalanceModalVisible] = useState(false);
   const [monthChanging, setMonthChanging] = useState(false);
-  
+
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const {
@@ -354,20 +354,11 @@ export default function HomeScreen() {
 
             {/* Saldo editável */}
             <Text style={styles.balanceLabel}>Saldo atual em contas</Text>
-            <TouchableOpacity
-              onPress={() => setEditBalanceModalVisible(true)}
-              disabled={monthChanging}
-              activeOpacity={0.8}
-            >
-              <View style={styles.balanceContainer}>
-                <Text style={styles.balance}>
-                  {data ? formatCurrency(data.currentBalance) : 'R$ 0,00'}
-                </Text>
-                <View style={styles.editBalanceIcon}>
-                  <Ionicons name="pencil" size={14} color="#fff" />
-                </View>
-              </View>
-            </TouchableOpacity>
+            <View style={styles.balanceContainer}>
+              <Text style={styles.balance}>
+                {data ? formatCurrency(data.currentBalance) : 'R$ 0,00'}
+              </Text>
+            </View>
           </LinearGradient>
 
           {/* Indicador de carregamento durante mudança de mês */}
@@ -455,56 +446,7 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Orçamento — placeholder visual */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>ORÇAMENTO</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Budget')}>
-                <Ionicons name="add-circle-outline" size={22} color="#3b82f6" />
-              </TouchableOpacity>
-            </View>
-            {data && data.transactions.length > 0 ? (
-              <>
-                <View style={styles.budgetRow}>
-                  <View style={styles.budgetInfo}>
-                    <Text style={styles.budgetLabel}>Meta</Text>
-                    <Text style={styles.budgetValue}>{formatCurrency(data.totalIncome)}</Text>
-                  </View>
-                  <View style={styles.budgetBarWrap}>
-                    <View style={styles.budgetTrack}>
-                      <View style={[
-                        styles.budgetFill,
-                        {
-                          width: `${Math.min((data.totalExpense / (data.totalIncome || 1)) * 100, 100)}%` as any,
-                        }
-                      ]} />
-                    </View>
-                    <Text style={styles.budgetPct}>
-                      {data.totalIncome > 0
-                        ? `${((data.totalExpense / data.totalIncome) * 100).toFixed(0)}%`
-                        : '0%'}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.budgetRow}>
-                  <View style={styles.budgetInfo}>
-                    <Text style={styles.budgetLabel}>Valor gasto</Text>
-                    <Text style={styles.budgetValue}>{formatCurrency(data.totalExpense)}</Text>
-                  </View>
-                </View>
-                <View style={styles.budgetRow}>
-                  <View style={styles.budgetInfo}>
-                    <Text style={styles.budgetLabel}>Previsto</Text>
-                    <Text style={[styles.budgetValue, { color: data.currentBalance >= 0 ? '#10b981' : '#ef4444' }]}>
-                      {formatCurrency(data.currentBalance)}
-                    </Text>
-                  </View>
-                </View>
-              </>
-            ) : (
-              <Text style={styles.emptySmall}>Adicione transações para ver o orçamento</Text>
-            )}
-          </View>
+          
 
           {/* Últimas transações */}
           {recentTransactions.length > 0 && (

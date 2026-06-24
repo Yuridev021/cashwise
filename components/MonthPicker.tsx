@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#3b82f6',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,

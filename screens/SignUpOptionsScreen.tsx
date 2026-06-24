@@ -28,15 +28,6 @@ export default function SignUpOptionsScreen() {
         Crie sua conta e comece a transformar suas finanças.
       </Text>
 
-      <TouchableOpacity style={styles.socialButton}>
-        <Image
-          source={{ uri: "https://cdn-icons-png.flaticon.com/512/2991/2991148.png" }}
-          style={styles.googleIcon}
-        />
-        <Text style={styles.socialText}>Continuar com Google</Text>
-      </TouchableOpacity>
-
-
       <TouchableOpacity onPress={() => navigation.navigate("SignUpForm")}>
         <LinearGradient
           colors={["#34d399", "#34d399"]}
@@ -47,9 +38,6 @@ export default function SignUpOptionsScreen() {
         </LinearGradient>
       </TouchableOpacity>
       
-
-
-
       <TouchableOpacity onPress={() => navigation.navigate("SignInOptions")}>
         <Text style={styles.loginLink}>Entrar</Text>
       </TouchableOpacity>

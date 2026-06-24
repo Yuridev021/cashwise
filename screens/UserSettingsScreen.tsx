@@ -202,25 +202,9 @@ export default function UserSettingsScreen() {
             currentYear={currentYear}
             onMonthChange={setCurrentMonth}
             disabled={exporting || financeLoading}
-          />
+          /> 
         </View>
-
         <Text style={styles.exportMonthLabel}>{monthLabel}</Text>
-
-        <TouchableOpacity
-          style={[styles.exportButton, exporting && { opacity: 0.7 }]}
-          onPress={handleExportCsv}
-          disabled={exporting || financeLoading}
-        >
-          {exporting ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="document-text-outline" size={18} color="#fff" />
-              <Text style={styles.exportButtonText}>Exportar CSV</Text>
-            </>
-          )}
-        </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.exportSecondaryButton, exporting && { opacity: 0.7 }]}
